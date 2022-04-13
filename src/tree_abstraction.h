@@ -29,6 +29,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <regex> // NOLINT [build/c++11]
 
 #include "common_util.h"
 
@@ -86,8 +87,8 @@ class ExpressionCompacter {
   // Singleton - we want to have a common shortening scheme across training and
   // multi-threaded inference.
   static ExpressionCompacter& Get() {
-    static ExpressionCompacter shortner;
-    return shortner;
+    static ExpressionCompacter shortener;
+    return shortener;
   }
 
  private:
@@ -136,6 +137,12 @@ inline std::string NodeToString<LEVEL_MIN, LANGUAGE_C>(
 
 template <>
 inline std::string NodeToString<LEVEL_MIN, LANGUAGE_VERILOG>(
+    const TSNode& conditional_expression) {
+  return NodeToString<LEVEL_MIN, LANGUAGE_C>(conditional_expression);
+}
+
+template <>
+inline std::string NodeToString<LEVEL_MIN, LANGUAGE_PHP>(
     const TSNode& conditional_expression) {
   return NodeToString<LEVEL_MIN, LANGUAGE_C>(conditional_expression);
 }
@@ -265,14 +272,19 @@ inline std::string OriginalSourceExpression(
     const std::string& source_file_contents) {
   size_t start_byte = ts_node_start_byte(node);
   size_t end_byte =  ts_node_end_byte(node);
-  return source_file_contents.substr(start_byte, end_byte - start_byte);
+
+  int length = end_byte - start_byte;
+  std::string substr = source_file_contents.substr(start_byte, length);
+  std::string substr_nonewline =  regex_replace(substr, std::regex("\n"), "");
+  return regex_replace(substr_nonewline, std::regex("\r"), "");
 }
 
 inline std::string OpToString(const TSNode& node) {
   const std::string& operator_str = "operator";
   TSNode op = ts_node_child_by_field_name(node, operator_str.c_str(),
                                           operator_str.length());
-
+  if (ts_node_is_null(op))
+    return "";
   char* node_string = ts_node_string(op);
   std::string orig_op_string = node_string;
   free(node_string);
@@ -347,7 +359,7 @@ inline std::string NodeToString<LEVEL_TWO, LANGUAGE_C>(
     ret += ")";
   } else {
     throw cf_unexpected_situation(
-      "Expecting paranthesized_expression at top-level, found:" +
+      "Expecting parenthesized_expression at top-level, found:" +
       std::string(ts_node_string(conditional_expression)));
   }
 
@@ -361,6 +373,12 @@ template <>
 inline std::string NodeToString<LEVEL_TWO, LANGUAGE_VERILOG>(
   const TSNode& conditional_expression) {
     return NodeToString<LEVEL_MIN, LANGUAGE_VERILOG>(conditional_expression);
+}
+
+template <>
+inline std::string NodeToString<LEVEL_TWO, LANGUAGE_PHP>(
+  const TSNode& conditional_expression) {
+    return NodeToString<LEVEL_MIN, LANGUAGE_PHP>(conditional_expression);
 }
 // -----------------------------------------------------------------------
 // Close to full-detailed level with using Tree-sitter print. Only
@@ -403,6 +421,12 @@ inline std::string NodeToString<LEVEL_ONE, LANGUAGE_C>(const TSNode& node) {
 
 template <>
 inline std::string NodeToString<LEVEL_ONE, LANGUAGE_VERILOG>(
+  const TSNode& conditional_expression) {
+    return NodeToString<LEVEL_ONE, LANGUAGE_C>(conditional_expression);
+}
+
+template <>
+inline std::string NodeToString<LEVEL_ONE, LANGUAGE_PHP>(
   const TSNode& conditional_expression) {
     return NodeToString<LEVEL_ONE, LANGUAGE_C>(conditional_expression);
 }

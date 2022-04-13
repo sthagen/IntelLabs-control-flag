@@ -30,14 +30,16 @@
 
 extern "C" const TSLanguage *tree_sitter_c();
 extern "C" const TSLanguage *tree_sitter_verilog();
+extern "C" const TSLanguage *tree_sitter_php();
 
 enum Language {
   LANGUAGE_C = 1,
-  LANGUAGE_VERILOG = 2
+  LANGUAGE_VERILOG = 2,
+  LANGUAGE_PHP = 3
 };
 
 #define LANGUAGE_MIN LANGUAGE_C
-#define LANGUAGE_MAX LANGUAGE_VERILOG
+#define LANGUAGE_MAX LANGUAGE_PHP
 
 inline Language VerifyLanguage(int language) {
   if (language < LANGUAGE_MIN)
@@ -56,13 +58,16 @@ template <> inline const TSLanguage* GetTSLanguage<LANGUAGE_C> () {
 template <> inline const TSLanguage* GetTSLanguage<LANGUAGE_VERILOG> () {
   return tree_sitter_verilog();
 }
+template <> inline const TSLanguage* GetTSLanguage<LANGUAGE_PHP> () {
+  return tree_sitter_php();
+}
 
 template<Language L>
 class ParserBase {
  public:
   ParserBase() {
     parser_ = ts_parser_new();
-    // set_language API call can fail if tree-sitter libarary version is
+    // set_language API call can fail if tree-sitter library version is
     // different than its language support.
     bool ret = ts_parser_set_language(parser_, GetTSLanguage<L>());
     assert(ret == true);
@@ -108,6 +113,9 @@ template <> inline bool IsIfStatement<LANGUAGE_C>(const TSNode& node) {
 }
 template <> inline bool IsIfStatement<LANGUAGE_VERILOG>(const TSNode& node) {
   return IsTSNodeofType(node, "conditional_statement");
+}
+template <> inline bool IsIfStatement<LANGUAGE_PHP>(const TSNode& node) {
+  return IsTSNodeofType(node, "if_statement");
 }
 inline bool IsCommentNode(const TSNode& node) {
   return IsTSNodeofType(node, "comment");
@@ -169,6 +177,12 @@ inline TSNode GetIfConditionNode<LANGUAGE_VERILOG>(const TSNode& if_statement) {
   // TODO(nhasabni): This requires common_util.h, which creates cyclic
   // dependency.
   // throw cf_parse_error("if statement without cond_predicate node");
+}
+template <>
+inline TSNode GetIfConditionNode<LANGUAGE_PHP>(const TSNode& if_statement) {
+  const std::string& kIfCondition = "condition";
+  return ts_node_child_by_field_name(if_statement,
+                      kIfCondition.c_str(), kIfCondition.length());
 }
 
 std::string OriginalSourceExpression(const TSNode&, const std::string&);
